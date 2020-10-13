@@ -10,35 +10,36 @@ import Foundation
 import UIKit
 import RxSwift
 import RxCocoa
-import SwiftyJSON
 
 public class SKLogDebugger {
     public static let shared = SKLogDebugger()
     
-    let logsObserver = PublishSubject<(logs: [SKLDLog], omitActions: [String])>()
-    var logs: [SKLDLog] = []
-    var validOmitActions: [String] = SKLDDefaults.validOmitActions.getStrings()
-    var parentViewController: UIViewController?
+    internal let logsObserver = PublishSubject<(logs: [SKLDLog], omitActions: [String])>()
+    internal var logs: [SKLDLog] = []
+    internal var validOmitActions: [String] = SKLDDefaults.validOmitActions.getStrings()
+    private weak var parentViewController: UIViewController?
 
-    fileprivate var omitActions: [String] = []
-    fileprivate var menuTrackView: SKLDMenuTrackView?
-    fileprivate var listTrackView: SKLDListTrackView?
+    private var omitActions: [String] = []
+    private var menuTrackView: SKLDMenuTrackView?
+    private var listTrackView: SKLDListTrackView?
     
-    fileprivate var isShowTrackView = false
-    fileprivate let addLogMutex = NSLock()
-    fileprivate let disposeBag = DisposeBag()
+    private var isShowTrackView = false
+    private let addLogMutex = NSLock()
+    private let disposeBag = DisposeBag()
     
     public func setOmitActions(_ actions: [String]) {
         omitActions = actions.unique()
     }
     
     public func addLog(action: String, data: [String: Any]) {
-        addLog(action: action, string: JSON(data).rawString() ?? "")
+        let jsonData = try? JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted])
+        let jsonStr = jsonData.flatMap { String(bytes: $0, encoding: .utf8) }
+        addLog(action: action, string: jsonStr ?? "")
     }
     
     public func addLog(action: String, string: String) {
         DispatchQueue.global(qos: .default).async { [weak self] in
-            guard let `self` = self else { return }
+            guard let self = self else { return }
             self.addLogMutex.lock()
             defer { self.addLogMutex.unlock() }
             
@@ -50,7 +51,7 @@ public class SKLogDebugger {
             }
             
             DispatchQueue.main.async { [weak self] in
-                guard let `self` = self else { return }
+                guard let self = self else { return }
                 self.logs.insert(SKLDLog(action: action, string: string), at: 0)
                 self.logsObserver.onNext((logs: self.logs, omitActions: self.validOmitActions))
             }
@@ -71,21 +72,25 @@ public class SKLogDebugger {
 }
 
 extension SKLogDebugger {
-    
     func showTrackView() {
-        guard SKLDDefaults.isDebugMode.getBool() else { return }
-        let w = UIScreen.main.bounds.width
-        let h = UIScreen.main.bounds.height
+        guard SKLDDefaults.isDebugMode.getBool() else {
+            return
+        }
+        guard let baseWindow = UIApplication.shared.delegate?.window.flatMap({ $0 }) else {
+            return
+        }
+        
+        let w = baseWindow.bounds.width
+        let h = baseWindow.bounds.height
         
         if let view = menuTrackView {
             view.removeFromSuperview()
-            UIApplication.shared.delegate?.window??.addSubview(view)
+            baseWindow.addSubview(view)
         } else {
             let view = SKLDMenuTrackView(frame: CGRect(x: (w/2)-125, y: 20, width: 250, height: 50))
             let gesture = UIPanGestureRecognizer()
             gesture.rx.event.subscribe(onNext: { gesture in
-                guard let window = UIApplication.shared.delegate?.window, let w = window else { return }
-                let p = gesture.location(in: w)
+                let p = gesture.location(in: baseWindow)
                 switch gesture.state {
                 case .changed:
                     view.center.x = p.x
@@ -96,32 +101,31 @@ extension SKLogDebugger {
             }).disposed(by: view.disposeBag)
             view.addGestureRecognizer(gesture)
             view.realtimeButton.rx.tap.subscribe(onNext: { [weak self] _ in
-                guard let `self` = self else { return }
+                guard let self = self else { return }
                 if let listTrackView = self.listTrackView {
                     listTrackView.isHidden = !listTrackView.isHidden
                 }
             }).disposed(by: view.disposeBag)
             view.logListButton.rx.tap.subscribe(onNext: { [weak self] _ in
-                guard let `self` = self else { return }
+                guard let self = self else { return }
                 self.openLogListView()
             }).disposed(by: view.disposeBag)
             view.settingButton.rx.tap.subscribe(onNext: { [weak self] _ in
-                guard let `self` = self else { return }
+                guard let self = self else { return }
                 self.openSettingView()
             }).disposed(by: view.disposeBag)
-            UIApplication.shared.delegate?.window??.addSubview(view)
+            baseWindow.addSubview(view)
             menuTrackView = view
         }
         
         if let view = self.listTrackView {
             view.removeFromSuperview()
-            UIApplication.shared.delegate?.window??.addSubview(view)
+            baseWindow.addSubview(view)
         } else {
             let view = SKLDListTrackView(frame: CGRect(x: (w/2)-150, y: h-220, width: 300, height: 200))
             let gesture = UIPanGestureRecognizer()
             gesture.rx.event.subscribe(onNext: { gesture in
-                guard let window = UIApplication.shared.delegate?.window, let w = window else { return }
-                let p = gesture.location(in: w)
+                let p = gesture.location(in: baseWindow)
                 switch gesture.state {
                 case .changed:
                     view.center.x = p.x
@@ -131,7 +135,7 @@ extension SKLogDebugger {
                 }
             }).disposed(by: view.disposeBag)
             view.addGestureRecognizer(gesture)
-            UIApplication.shared.delegate?.window??.addSubview(view)
+            baseWindow.addSubview(view)
             listTrackView = view
         }
     }
@@ -141,14 +145,14 @@ extension SKLogDebugger {
         listTrackView?.removeFromSuperview()
     }
     
-    fileprivate func openLogListView() {
+    private func openLogListView() {
         let vc = UIStoryboard.instantiate("SKLDListViewController") as! SKLDListViewController
         let nvc = UINavigationController(rootViewController: vc)
         topViewController()?.present(nvc, animated: true, completion: nil)
         hideTrackView()
     }
     
-    fileprivate func topViewController() -> UIViewController? {
+    private func topViewController() -> UIViewController? {
         if let parentViewController = parentViewController {
             return parentViewController
         } else {

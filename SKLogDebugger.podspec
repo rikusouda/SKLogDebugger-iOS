@@ -8,9 +8,9 @@
 
 Pod::Spec.new do |s|
   s.name             = 'SKLogDebugger'
-  s.version          = '1.2.0'
+  s.version          = '1.3.0'
   s.summary          = 'This is Saikyo.'
-  s.swift_version    = '5.0'
+  s.swift_version    = '5.1'
 
 # This description is used to generate tags and improve search results.
 #   * Think: What does it do? Why did you write it? What is the focus?
@@ -31,14 +31,13 @@ Saikyo log debugger.
   s.ios.deployment_target = '10.0'
 
   s.source_files = 'SKLogDebugger/Classes/**/*'
-  
+
   s.resource_bundles = {
 'SKLogDebugger' => ['SKLogDebugger/Assets/**/*.{xib,storyboard}']
   }
 
   s.frameworks = 'UIKit'
-  s.dependency 'RxSwift', '~> 4.0'
-  s.dependency 'RxCocoa', '~> 4.0'
-  s.dependency 'SwiftyJSON'
+  s.dependency 'RxSwift', '~> 5'
+  s.dependency 'RxCocoa', '~> 5'
   s.dependency 'SwiftyAttributes'
 end
